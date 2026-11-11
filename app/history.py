@@ -39,8 +39,8 @@ def _esc(part):
 
 
 def _write_excludes(folders):
-    """Ignore everything in ~/Courses except the doc folders (and WHATS-NEW.md)."""
-    rules = ["/*", "!/WHATS-NEW.md"]
+    """Ignore everything in the courses folder except the doc folders."""
+    rules = ["/*"]
     allowed = set()
     for f in sorted(folders):
         rel = os.path.relpath(f, core.OUTPUT_ROOT)

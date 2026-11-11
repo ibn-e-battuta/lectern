@@ -103,7 +103,7 @@ def docs_info():
             "configured_folder": folder or "", "pages": len(pages), "removed": removed,
             "last_sync": st.get("last_sync"),
             "pdf": file_url(pdf) if pdf and os.path.exists(pdf) else None,
-            "read": "/files/Docs%%20Site/index.html#/%s/%s" % (guid, pages[0][0]) if pages else None,
+            "read": "/site/index.html#/%s/%s" % (guid, pages[0][0]) if pages else None,
             "changes": file_url(os.path.join(d, "CHANGES.md")) if d and os.path.exists(os.path.join(d, "CHANGES.md")) else None,
         })
     return out
@@ -174,7 +174,7 @@ def search(q, limit=60):
                 page_id, title = titles.get(os.path.relpath(p, folder), (None, fn[:-3]))
                 score = sum(low.count(t) for t in terms) + (20 if any(t in (title or "").lower() for t in terms) else 0)
                 results.append({"title": title, "doc": st.get("title"), "path": rel(p), "file": file_url(p),
-                                "read": "/files/Docs%%20Site/index.html#/%s/%s" % (g, page_id) if page_id else None,
+                                "read": "/site/index.html#/%s/%s" % (g, page_id) if page_id else None,
                                 "snippets": snippets, "score": score})
     results.sort(key=lambda r: -r["score"])
     return results[:limit]
@@ -186,7 +186,7 @@ def folder_suggestions():
     try:
         for a in sorted(os.listdir(root)):
             pa = os.path.join(root, a)
-            if a.startswith(".") or a == "Docs Site" or not os.path.isdir(pa):
+            if a.startswith(".") or not os.path.isdir(pa):
                 continue
             out.append(a)
             for b in sorted(os.listdir(pa)):
@@ -263,6 +263,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"stat": stat.strip(), "diff": diff})
             if path == "/api/folders":
                 return self.send_json({"folders": folder_suggestions()})
+            if path in ("/site", "/site/"):
+                return self.redirect("/site/index.html")
+            if path.startswith("/site/"):
+                return self.serve_site(urllib.parse.unquote(path[len("/site/"):]))
             if path.startswith("/files/"):
                 return self.serve_file(urllib.parse.unquote(path[len("/files/"):]))
             if path in ("/favicon.ico", "/apple-touch-icon.png", "/manifest.webmanifest"):
@@ -279,6 +283,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.serve_file(urllib.parse.unquote(path[len("/files/"):]), body=False)
         if path.startswith("/static/"):
             return self.serve_static(path[len("/static/"):], body=False)
+        if path.startswith("/site/"):
+            return self.serve_site(urllib.parse.unquote(path[len("/site/"):]), body=False)
         self.send_response(200 if path in ("/", "/index.html") or path.startswith("/api/") else 404)
         self.end_headers()
 
@@ -292,6 +298,28 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", MIME.get(os.path.splitext(name)[1].lower(), "application/octet-stream"))
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        if body:
+            self.wfile.write(data)
+
+    def redirect(self, to):
+        self.send_response(302)
+        self.send_header("Location", to)
+        self.end_headers()
+
+    def serve_site(self, name, body=True):
+        """The docs site Lectern generates (data/site)."""
+        if name not in ("index.html", "data.js", "icon.svg", "favicon.ico"):
+            return self.err("not found", 404)
+        full = os.path.join(core.SITE_DIR, name)
+        if not os.path.isfile(full):
+            return self.err("The docs site hasn't been built yet. Run a sync.", 404)
+        with open(full, "rb") as f:
+            data = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", MIME.get(os.path.splitext(name)[1].lower(), "application/octet-stream"))
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         if body:
             self.wfile.write(data)
@@ -325,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
             "schedule": sch, "schedule_text": cli.describe_schedule(sch),
             "next_run": nd.strftime("%a %d %b, %H:%M") if nd else None,
             "config": core.load_config(), "running": sync_running(),
-            "site": "/files/Docs%20Site/index.html" if os.path.exists(os.path.join(core.OUTPUT_ROOT, "Docs Site", "index.html")) else None,
+            "site": "/site/index.html" if os.path.exists(os.path.join(core.SITE_DIR, "index.html")) else None,
             "news": os.path.exists(core.WHATS_NEW_FILE),
             "root": os.environ.get("LECTERN_HOST_ROOT") or core.OUTPUT_ROOT,
         }
@@ -696,7 +724,7 @@ function settingsView(auto){var st=S.state;if(!st){view.innerHTML='<div class="e
     '<div id="modeBody" style="margin-top:12px"></div><div style="margin-top:14px"><button class="btn primary" id="saveSch" type="button">Save schedule</button></div>'+
     '<p class="small muted">Missed times (Mac asleep, Docker stopped) are caught up as soon as the container is running again.</p></div>'+
     '<div class="card"><h2>After each sync</h2>'+
-    sw("site","Rebuild the docs site","Sidebar, search and dark mode, in Courses/Docs Site")+sw("pdf","Rebuild PDFs","For docs that changed")+
+    sw("site","Rebuild the docs site","Sidebar, search and dark mode, at /site")+sw("pdf","Rebuild PDFs","For docs that changed")+
     sw("git","Save a history snapshot","So you can see or undo changes")+sw("videos","Download uploaded videos","Hosted players like YouTube stay as links")+'</div>';
   view.innerHTML=h;
   function sw(k,t,d){return'<div class="switch"><span>'+t+'<br><span class="small muted">'+d+'</span></span><input type="checkbox" data-k="'+k+'" '+(c[k]?"checked":"")+'></div>'}
@@ -714,7 +742,8 @@ function settingsView(auto){var st=S.state;if(!st){view.innerHTML='<div class="e
     api("/api/schedule",p).then(function(r){toast("Saved: "+r.text);S.editing=false;document.activeElement&&document.activeElement.blur();refresh()}).catch(fail)}
   document.getElementById("saveSch").onclick=save;document.getElementById("en").onchange=save}
 
-S.tab=store.get("tab")||"docs";go(S.tab);refresh();
+var tabs=["docs","add","search","news","history","activity","settings"],hashTab=location.hash.slice(1);
+S.tab=tabs.indexOf(hashTab)>=0?hashTab:(store.get("tab")||"docs");go(S.tab);refresh();
 })();
 </script></body></html>
 """

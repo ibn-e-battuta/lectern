@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     init: true
     # Run as your Mac user so every file it writes is owned by you.
-    user: "${HOST_UID:-501}:${HOST_GID:-20}"
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     ports:
       - "127.0.0.1:${LECTERN_PORT:-8790}:8790"   # web UI, only reachable from this Mac
     environment:

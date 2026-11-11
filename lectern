@@ -25,6 +25,7 @@ need_docker() {
 }
 
 running() { [ -n "$(dc ps -q lectern 2>/dev/null)" ]; }
+ensure_up() { running || { echo "Starting Lectern..."; need_docker; dc up -d lectern >/dev/null; sleep 3; }; }
 
 # Run a command in a one-off container (no ports published); show container paths as Mac paths.
 run() {
@@ -63,14 +64,11 @@ case "$cmd" in
   logs)
     dc logs -f --tail 50 lectern ;;
   ui)
-    running || { echo "Starting lectern..."; need_docker; dc up -d lectern >/dev/null; sleep 2; }
-    open "$UI" ;;
+    ensure_up; open "$UI" ;;
   open)
-    if running; then open "$UI/files/Docs%20Site/index.html"
-    else [ -f "$ROOT/Docs Site/index.html" ] || run site; open "$ROOT/Docs Site/index.html"; fi ;;
+    ensure_up; open "$UI/site/index.html" ;;
   news)
-    if [ -f "$ROOT/WHATS-NEW.md" ]; then open "$ROOT/WHATS-NEW.md"
-    else echo "Nothing yet: WHATS-NEW.md is written after a sync finds changes."; fi ;;
+    ensure_up; open "$UI/#news" ;;
   scan)
     src="$1"; shift 2>/dev/null
     if [ "$src" = "--clipboard" ]; then

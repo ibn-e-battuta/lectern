@@ -1,7 +1,7 @@
 """
 Local HTML site and PDF export for docs mirrored by lectern_sync.
 
-    build_site()          -> ~/Courses/Docs Site/index.html (sidebar, search, dark mode)
+    build_site()          -> data/site/index.html, served by the web UI at /site (sidebar, search, dark mode)
     build_pdf(guid)       -> <doc folder>/<doc title>.pdf  (via headless Google Chrome)
 """
 import html
@@ -17,7 +17,12 @@ from datetime import datetime
 
 import lectern_sync as core
 
-SITE_DIR = os.path.join(core.OUTPUT_ROOT, "Docs Site")
+SITE_DIR = core.SITE_DIR
+
+
+def files_url(path):
+    """Link from the site (served at /site/) to a file in the courses folder (served at /files/)."""
+    return "../files/" + urllib.parse.quote(os.path.relpath(path, core.OUTPUT_ROOT))
 CHROME_CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -264,7 +269,7 @@ def build_site():
         def asset(url, st=st, out=out):
             rel = st.get("assets", {}).get(url)
             if rel:
-                return urllib.parse.quote(os.path.relpath(os.path.join(out, rel), SITE_DIR))
+                return files_url(os.path.join(out, rel))
             return url
 
         def link(href, origin=doc_origin(st)):
@@ -282,9 +287,9 @@ def build_site():
         data.append({
             "id": d["guid"], "title": st.get("title") or d["guid"], "course": course, "folder": folder,
             "source": st.get("source"), "synced": st.get("last_sync"),
-            "pdf": urllib.parse.quote(os.path.relpath(pdf, SITE_DIR)) if os.path.exists(pdf) else None,
+            "pdf": files_url(pdf) if os.path.exists(pdf) else None,
             "pages": [{"id": p["guid"], "title": p["title"], "depth": p["depth"],
-                       "file": urllib.parse.quote(os.path.relpath(os.path.join(out, p["path"]), SITE_DIR)),
+                       "file": files_url(os.path.join(out, p["path"])),
                        "html": r.render(p["body"]), "text": text_of(p["body"])} for p in d["pages"]],
         })
     payload = {"generated": datetime.now().strftime("%Y-%m-%d %H:%M"), "docs": data}

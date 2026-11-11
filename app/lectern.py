@@ -12,7 +12,7 @@
   lectern open                      open the local docs site in your browser
   lectern site                      rebuild the local docs site
   lectern pdf [DOC|all]             (re)build PDFs
-  lectern news                      open WHATS-NEW.md
+  lectern news                      open What's new in the web UI
   lectern history [N]               list saved snapshots
   lectern history show SHA          what changed in a snapshot
   lectern history restore PATH SHA  put a file/folder back as it was in a snapshot
@@ -302,10 +302,7 @@ def cmd_news(_args):
     if not os.path.exists(core.WHATS_NEW_FILE):
         print("Nothing yet: WHATS-NEW.md is written after a sync finds changes.")
         return
-    if shutil.which("open"):
-        subprocess.run(["open", core.WHATS_NEW_FILE])
-    else:
-        print(core.WHATS_NEW_FILE)
+    print(core.WHATS_NEW_FILE)
 
 
 # -------------------------------------------------------------- history
