@@ -1,0 +1,4 @@
+# only the app code goes into the image
+*
+!app/
+app/__pycache__

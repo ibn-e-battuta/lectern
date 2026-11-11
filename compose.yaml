@@ -1,0 +1,20 @@
+# lectern on its own:              docker compose up -d        (or: lectern start)
+# lectern together with Lyceum: ../course-stack/compose.yaml includes this file.
+# Both use the project name "courses", so lectern never runs twice.
+name: courses
+
+services:
+  lectern:
+    build: .
+    image: lectern:latest
+    restart: unless-stopped
+    init: true
+    # Run as your Mac user so every file it writes is owned by you.
+    user: "${HOST_UID:-501}:${HOST_GID:-20}"
+    ports:
+      - "127.0.0.1:${LECTERN_PORT:-8790}:8790"   # web UI, only reachable from this Mac
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${COURSES_DIR:?set COURSES_DIR in .env}:/courses   # docs are written here
+      - ./data:/data                                        # links, settings, logs, history

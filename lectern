@@ -1,0 +1,94 @@
+#!/bin/bash
+# lectern - Mac command for the lectern Docker project (~/Developer/Lectern).
+# Runs commands inside the container; handles the Mac-only bits (open, clipboard) here.
+set -o pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+DIR="$(cd "$(dirname "$SELF")" && pwd)"
+envval() { grep -E "^$1=" "$DIR/.env" 2>/dev/null | tail -1 | cut -d= -f2-; }
+ROOT="$(envval COURSES_DIR)"; ROOT="${ROOT:-$HOME/Courses}"
+PORT="$(envval LECTERN_PORT)"; PORT="${PORT:-8790}"
+UI="http://localhost:$PORT"
+IMAGE="lectern:latest"
+
+dc() { docker compose --progress quiet --project-directory "$DIR" -f "$DIR/compose.yaml" "$@"; }
+
+need_docker() {
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker isn't running. Start Docker Desktop, then try again." >&2
+    exit 1
+  fi
+  if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    echo "Building the lectern image (first run only)..." >&2
+    dc build lectern >&2 || exit 1
+  fi
+}
+
+running() { [ -n "$(dc ps -q lectern 2>/dev/null)" ]; }
+
+# Run a command in a one-off container (no ports published); show container paths as Mac paths.
+run() {
+  need_docker
+  local tty=()
+  if [ -t 0 ] && [ -t 1 ]; then :; else tty=(-T); fi
+  dc run --rm "${tty[@]}" lectern "$@" | sed -l "s#/courses/#$ROOT/#g; s#/courses\$#$ROOT#g"
+}
+
+# Turn a Mac path into a path relative to the courses folder (what the container understands).
+to_rel() {
+  local p="$1"
+  [[ "$p" != /* ]] && p="$PWD/$p"
+  case "$p" in
+    "$ROOT"/*) echo "${p#"$ROOT"/}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+show_status() {
+  dc ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null
+  if running; then echo "Web UI: $UI"; else echo "lectern is not running. Start it with: lectern start"; fi
+}
+
+cmd="$1"; shift 2>/dev/null
+case "$cmd" in
+  start)
+    need_docker; dc up -d --build lectern && show_status ;;
+  stop)
+    dc stop lectern >/dev/null && dc rm -f lectern >/dev/null
+    echo "lectern stopped. Automatic syncs are paused until: lectern start" ;;
+  restart|rebuild)
+    need_docker; dc build lectern && dc up -d --force-recreate lectern && show_status ;;
+  status)
+    need_docker; show_status; run schedule ;;
+  logs)
+    dc logs -f --tail 50 lectern ;;
+  ui)
+    running || { echo "Starting lectern..."; need_docker; dc up -d lectern >/dev/null; sleep 2; }
+    open "$UI" ;;
+  open)
+    if running; then open "$UI/files/Docs%20Site/index.html"
+    else [ -f "$ROOT/Docs Site/index.html" ] || run site; open "$ROOT/Docs Site/index.html"; fi ;;
+  news)
+    if [ -f "$ROOT/WHATS-NEW.md" ]; then open "$ROOT/WHATS-NEW.md"
+    else echo "Nothing yet: WHATS-NEW.md is written after a sync finds changes."; fi ;;
+  scan)
+    src="$1"; shift 2>/dev/null
+    if [ "$src" = "--clipboard" ]; then
+      pbpaste | run scan - "$@"
+    elif [ -n "$src" ] && [ -f "$src" ]; then
+      abs="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
+      case "$abs" in
+        "$ROOT"/*) run scan "${abs#"$ROOT"/}" "$@" ;;
+        *) run scan - "$@" < "$src" ;;   # file outside the courses folder (e.g. Downloads): send it in
+      esac
+    else
+      run scan "$src" "$@"
+    fi ;;
+  history)
+    if [ "$1" = "restore" ]; then run history restore "$(to_rel "$2")" "$3"
+    else run history "$@"; fi ;;
+  ""|-h|--help|help)
+    run help ;;
+  *)
+    run "$cmd" "$@" ;;
+esac
