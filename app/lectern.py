@@ -21,6 +21,7 @@
   lectern schedule weekdays 09:00 [...]
   lectern schedule every 6h
   lectern schedule off | on
+  lectern version                   show the installed version
   lectern config [KEY on|off]       site / pdf / git / videos (all on by default)
 
 Docker (run on the Mac):
@@ -515,6 +516,7 @@ def main(argv):
         "add": cmd_add, "move": cmd_move, "remove": cmd_remove, "rm": cmd_remove, "list": cmd_list, "ls": cmd_list,
         "scan": cmd_scan, "search": cmd_search, "find": cmd_search,
         "site": cmd_site, "open": lambda a: cmd_site(a, open_it=True), "pdf": cmd_pdf, "news": cmd_news,
+        "version": lambda a: print("Lectern %s" % core.__version__),
         "history": cmd_history, "schedule": cmd_schedule, "config": cmd_config, "daemon": cmd_daemon, "serve": cmd_serve,
     }
     if cmd not in table:

@@ -71,6 +71,18 @@ To update Lectern later:
 git pull && docker compose up -d --build
 ```
 
+### Images and releases
+
+Ready-made images for **amd64** and **arm64** are published to GitHub Container Registry:
+
+| Tag | Contains |
+|---|---|
+| `ghcr.io/ibn-e-battuta/lectern:latest` | the newest release |
+| `:0.1.0`, `:0.1` | a specific release (pin one of these for predictable upgrades) |
+| `:edge` | the latest commit on `main` |
+
+A release is made by pushing a version tag such as `v0.2.0`. The workflow then publishes the versioned images and `:latest`, and creates a [GitHub Release](https://github.com/ibn-e-battuta/lectern/releases) whose notes come from the tag's message. Ordinary pushes to `main` only update `:edge`.
+
 ## Using Lectern
 
 ### Web UI
