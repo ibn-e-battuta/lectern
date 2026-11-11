@@ -56,20 +56,39 @@ Lectern only reads public share links. It never needs your bit.ai account or pas
 
 **Requirements:** Docker with Compose v2, and a folder for your courses that Lectern may write into.
 
+```yaml
+# docker-compose.yml
+services:
+  lectern:
+    image: ghcr.io/ibn-e-battuta/lectern:latest
+    user: "1000:1000"                         # your user and group id (`id -u`, `id -g`)
+    ports:
+      - "127.0.0.1:8790:8790"                 # web UI, this machine only
+    volumes:
+      - /path/to/your/courses:/courses        # documents are written here
+      - ./lectern-data:/data                  # links, settings, history
+    environment:
+      TZ: Europe/London                       # the schedule uses this time zone
+    restart: unless-stopped
+```
+
 ```bash
-git clone https://github.com/ibn-e-battuta/lectern.git
-cd lectern
-cp .env.example .env        # set COURSES_DIR, HOST_UID/HOST_GID (`id -u`, `id -g`) and TZ
-docker compose up -d
+mkdir -p lectern-data && docker compose up -d
 ```
 
 Open **http://localhost:8790**, go to **Add**, paste a share link, choose a folder and click **Add & download**. The default schedule syncs every day at 09:00 in your `TZ`.
 
-To update Lectern later:
+To update: `docker compose pull && docker compose up -d`.
+
+### From source
 
 ```bash
-git pull && docker compose up -d --build
+git clone https://github.com/ibn-e-battuta/lectern.git && cd lectern
+cp .env.example .env        # set COURSES_DIR, HOST_UID/HOST_GID and TZ
+docker compose up -d --build
 ```
+
+This uses the repository's `compose.yaml`, which builds the image from your clone and keeps its data in `./data`. Update with `git pull && docker compose up -d --build`.
 
 ### Images and releases
 
@@ -105,6 +124,7 @@ Every command runs in a one-off container, so it works whether or not the Lecter
 
 ```bash
 docker compose run --rm lectern help
+docker compose run --rm lectern version
 docker compose run --rm lectern add https://<org>.bitdocs.ai/share/d/<id> "Mastering C#/Docs"
 docker compose run --rm lectern sync
 docker compose run --rm lectern search dependency injection
@@ -216,7 +236,7 @@ services:
     restart: unless-stopped
 
   lectern:
-    build: https://github.com/ibn-e-battuta/lectern.git#main
+    image: ghcr.io/ibn-e-battuta/lectern:latest
     user: "1000:1000"
     ports:
       - "127.0.0.1:8790:8790"
@@ -239,7 +259,7 @@ Start, stop or update either one alone with `docker compose up -d lyceum`, `dock
 
 ### Keeping Lectern in its own folder
 
-If you already run Lectern from a clone of this repository, include its compose file instead of copying the service definition:
+If you run Lectern from a clone of this repository (see [From source](#from-source)), include its compose file instead of copying the service definition:
 
 ```yaml
 # docker-compose.yml, next to the lectern/ clone
