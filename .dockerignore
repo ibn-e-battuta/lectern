@@ -1,12 +1,6 @@
 bin/
 obj/
 config/
-data/history.git
-data/site
-data/*.txt
-data/*.json
-data/*.md
-data/*.log
 app/
 tests/
 *.db
