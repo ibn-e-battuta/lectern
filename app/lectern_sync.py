@@ -801,27 +801,6 @@ def write_whats_new(results, keep=60):
         f.write(head + "\n".join(lines) + "\n" + "".join(sections))
 
 
-def migrate_legacy_outputs():
-    """Older versions wrote WHATS-NEW.md and "Docs Site/" into the courses folder. Move them out."""
-    old_news = os.path.join(OUTPUT_ROOT, "WHATS-NEW.md")
-    if os.path.isfile(old_news):
-        if not os.path.exists(WHATS_NEW_FILE):
-            os.makedirs(HERE, exist_ok=True)
-            shutil.move(old_news, WHATS_NEW_FILE)
-            log("Moved WHATS-NEW.md out of the courses folder into %s" % HERE)
-        else:
-            log("WARN: %s exists in both places; leaving the courses-folder copy alone" % "WHATS-NEW.md")
-    old_site = os.path.join(OUTPUT_ROOT, "Docs Site")
-    generated = {"index.html", "data.js", "icon.svg", "favicon.ico", ".DS_Store"}
-    if os.path.isdir(old_site):
-        names = set(os.listdir(old_site))
-        if "index.html" in names and "data.js" in names and all(n in generated or n.endswith(".tmp") for n in names):
-            shutil.rmtree(old_site)
-            log("Removed the old generated 'Docs Site' folder from the courses folder (now in %s)" % SITE_DIR)
-        else:
-            log("WARN: '%s' has files Lectern didn't create; leaving it alone" % old_site)
-
-
 def _load_registry():
     """doc id -> absolute folder. Stored relative to OUTPUT_ROOT so it works on the Mac and in Docker."""
     try:
@@ -855,10 +834,6 @@ def main(argv):
     except OSError:
         log("Another sync is already running; skipping this one.")
         return 0
-    try:
-        migrate_legacy_outputs()
-    except Exception as e:
-        log("WARN: could not move old outputs out of the courses folder: %r" % e)
     all_links = read_links()
     if argv:
         want = [parse_link(a) for a in argv]

@@ -211,9 +211,9 @@ Changes made in the UI or with `lectern schedule` / `lectern config` are saved t
 [Lyceum](https://github.com/ibn-e-battuta/lyceum) is a self-hosted player for video courses. The two apps are independent and never call each other. They work together through the **courses folder they share**:
 
 - **Lectern writes** each course's documents into that course's folder.
-- **Lyceum reads** the same folder (read-only is enough) and shows them with the course. A `Docs` folder appears as its own section:
-  - each document's **PDF** is a reading lesson;
-  - the Markdown pages and attachments are that section's files.
+- **Lyceum reads** the same folder (read-only is enough) and shows them with the course. A `Docs` folder appears as its own section, after the course's other sections:
+  - each document's **Markdown pages** are reading lessons, and links between them open the next page in Lyceum's player;
+  - the whole-document **PDF**, `README.md` and `CHANGES.md` are that section's downloads.
 - **New documents show up in Lyceum by themselves.** It watches the folder, or rescans every 30 minutes where file watching isn't available (network shares, Docker Desktop).
 
 Either app can run alone, and either can be stopped without affecting the other.
