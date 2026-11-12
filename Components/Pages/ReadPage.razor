@@ -30,7 +30,7 @@
     </aside>
 
     <main class="reader-main">
-        <button class="btn small menu-btn" @onclick="() => menuOpen = !menuOpen">☰ Pages</button>
+        <button class="btn small menu-btn" @onclick="() => menuOpen = !menuOpen"><Icon Name="menu" /> Pages</button>
         @if (doc is null || current is null)
         {
             <div class="content">
@@ -55,12 +55,12 @@
                     <span>@doc.Info.Course</span><span>@doc.Title</span>
                     <a href="@Reader.FileUrl(Path.Combine(doc.Info.FolderPath!, current.Path))" target="_blank">Open .md</a>
                     @if (doc.Info.PdfFile is { } pdf) { <a href="@Reader.FileUrl(pdf)" target="_blank">PDF</a> }
-                    <a href="@($"https://{doc.Info.Doc.Host}/share/d/{current.Guid}")" target="_blank" rel="noopener">Online ↗</a>
+                    <a href="@($"https://{doc.Info.Doc.Host}/share/d/{current.Guid}")" target="_blank" rel="noopener">Online <Icon Name="external-link" Class="trailing" /></a>
                 </div>
                 @((MarkupString)html)
                 <div class="pager">
-                    @if (Prev is { } p) { <a href="@($"read/{doc.Guid}/{p.Guid}")"><small>← Previous</small>@p.Title</a> } else { <span></span> }
-                    @if (Next is { } n) { <a class="right" href="@($"read/{doc.Guid}/{n.Guid}")"><small>Next →</small>@n.Title</a> }
+                    @if (Prev is { } p) { <a href="@($"read/{doc.Guid}/{p.Guid}")"><small><Icon Name="arrow-left" Class="trailing" /> Previous</small>@p.Title</a> } else { <span></span> }
+                    @if (Next is { } n) { <a class="right" href="@($"read/{doc.Guid}/{n.Guid}")"><small>Next <Icon Name="arrow-right" Class="trailing" /></small>@n.Title</a> }
                 </div>
             </div>
         }

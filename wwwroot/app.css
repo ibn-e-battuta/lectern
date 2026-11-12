@@ -226,3 +226,12 @@ table.files td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-a
   .row > .btn { flex: 1 1 auto; }
   .reader-nav { top: 100px; }
 }
+
+/* ---------- icons (wwwroot/icons.svg, from Lucide) ---------- */
+.icon {
+  width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.icon-btn { display: inline-grid; place-items: center; }
+.icon-btn .icon { width: 18px; height: 18px; }
+.icon.trailing { width: 1em; height: 1em; margin-left: 2px; vertical-align: -0.15em; }

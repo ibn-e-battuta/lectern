@@ -18,7 +18,7 @@
         <span>@(Runner.Running is { } r ? (Runner.Current is { } c ? $"{r}: {c}" : r) + "…" : next is { } n ? $"Next sync {Format.When(n)}" : "Automatic sync off")</span>
     </span>
     <button class="btn primary" disabled="@(Runner.Running is not null)" @onclick="SyncAll">Sync now</button>
-    <button class="icon-btn" title="Theme: @theme" @onclick="CycleTheme">@(theme switch { "light" => "☀", "dark" => "☾", _ => "◐" })</button>
+    <button class="icon-btn" title="Theme: @theme" @onclick="CycleTheme"><Icon Name="@(theme switch { "light" => "sun", "dark" => "moon", _ => "sun-moon" })" /></button>
 </header>
 
 @code {

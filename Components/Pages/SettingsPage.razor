@@ -34,7 +34,7 @@
                     {
                         var at = i;
                         <input type="time" value="@times[at]" @onchange="e => times[at] = e.Value?.ToString() ?? times[at]" />
-                        @if (times.Count > 1) { <button class="btn small ghost" @onclick="() => times.RemoveAt(at)">✕</button> }
+                        @if (times.Count > 1) { <button class="btn small ghost" @onclick="() => times.RemoveAt(at)" title="Remove this time"><Icon Name="x" /></button> }
                     }
                     <button class="btn small" @onclick='() => times.Add("21:00")'>+ Add time</button>
                 </div>

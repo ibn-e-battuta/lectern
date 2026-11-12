@@ -57,7 +57,7 @@
                         <div class="acts">
                             @if (d.FirstPage is { } first) { <a class="btn small" href="@($"read/{d.Doc.Guid}/{first}")">Read</a> }
                             @if (d.PdfFile is { } pdf) { <a class="btn small" href="@Reader.FileUrl(pdf)" target="_blank">PDF</a> }
-                            <a class="btn small" href="@d.Doc.Url" target="_blank" rel="noopener">Online ↗</a>
+                            <a class="btn small" href="@d.Doc.Url" target="_blank" rel="noopener">Online <Icon Name="external-link" Class="trailing" /></a>
                             <button class="btn small" disabled="@busy" @onclick="() => Sync(d)">Sync</button>
                             <button class="btn small" disabled="@(busy || d.State is null)" @onclick="() => RebuildPdf(d)">Rebuild PDF</button>
                             <button class="btn small" @onclick="() => StartMove(d)">Move</button>
