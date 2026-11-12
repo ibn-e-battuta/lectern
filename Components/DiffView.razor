@@ -1,0 +1,24 @@
+@* A unified diff with added and removed lines coloured. *@
+<pre class="diff">@Lines</pre>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+
+    private RenderFragment Lines => b =>
+    {
+        var seq = 0;
+        foreach (var line in Text.Split('\n'))
+        {
+            b.OpenElement(seq++, "span");
+            b.AddAttribute(seq++, "class", Kind(line));
+            b.AddContent(seq++, line);
+            b.CloseElement();
+            b.AddContent(seq++, "\n");
+        }
+    };
+
+    private static string Kind(string l) =>
+        l.StartsWith("+++", StringComparison.Ordinal) || l.StartsWith("---", StringComparison.Ordinal) || l.StartsWith("@@", StringComparison.Ordinal)
+        || l.StartsWith("diff ", StringComparison.Ordinal) || l.StartsWith("index ", StringComparison.Ordinal) ? "h"
+        : l.StartsWith('+') ? "a" : l.StartsWith('-') ? "d" : "";
+}

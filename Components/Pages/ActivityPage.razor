@@ -1,0 +1,47 @@
+@page "/activity"
+@inject ActivityLog Log
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Activity · Lectern</PageTitle>
+<TopNav />
+
+<main class="page">
+    <div class="card">
+        <h2>Activity</h2>
+        <div class="log" id="log">@Lines</div>
+    </div>
+</main>
+
+@code {
+    private List<string> lines = [];
+
+    private RenderFragment Lines => b =>
+    {
+        var seq = 0;
+        if (lines.Count == 0) { b.AddContent(seq, "No activity yet."); return; }
+        foreach (var l in lines)
+        {
+            b.OpenElement(seq++, "span");
+            b.AddAttribute(seq++, "class", l.Contains("ERROR") ? "e" : l.Contains("WARN") ? "w" : IsNews(l) ? "n" : "");
+            b.AddContent(seq++, l);
+            b.CloseElement();
+            b.AddContent(seq++, "\n");
+        }
+    };
+
+    private static bool IsNews(string l) =>
+        System.Text.RegularExpressions.Regex.IsMatch(l, @"Done .*: [1-9]|   new:|   updated:|History:");
+
+    protected override void OnInitialized()
+    {
+        lines = Log.Tail(400);
+        Log.Changed += OnChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) => await JS.InvokeVoidAsync("lectern.followLog", "log", firstRender);
+
+    private void OnChanged() => InvokeAsync(() => { lines = Log.Tail(400); StateHasChanged(); });
+
+    public void Dispose() => Log.Changed -= OnChanged;
+}

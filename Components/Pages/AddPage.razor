@@ -1,0 +1,112 @@
+@page "/add"
+@inject DocsService Docs
+@inject LinkScanner Scanner
+@inject SyncRunner Runner
+@inject NavigationManager Nav
+
+<PageTitle>Add · Lectern</PageTitle>
+<TopNav />
+
+<main class="page">
+    <div class="card">
+        <h2>Add a document</h2>
+        <div class="row">
+            <label class="field grow"><span>Share link</span>
+                <input type="text" @bind="url" placeholder="https://yourorg.bitdocs.ai/share/d/…" />
+            </label>
+            <label class="field grow"><span>Folder <span class="muted">(inside your courses folder)</span></span>
+                <input type="text" @bind="folder" list="folders" placeholder="Course Name/Docs" />
+            </label>
+            <button class="btn primary" disabled="@adding" @onclick="AddAsync">@(adding ? "Checking…" : "Add & download")</button>
+        </div>
+        @if (addMessage is not null) { <p class="@(addFailed ? "error" : "good") tiny">@addMessage</p> }
+        <p class="muted tiny">Leave the folder empty to use a new folder named after the document. Several documents in the same folder each get their own sub-folder.</p>
+    </div>
+
+    <div class="card">
+        <h2>Find links on a course page</h2>
+        <p class="muted tiny">Paste a course page's address, or, if it needs a login, open it in your browser, select all, copy, and paste the text or page source here.</p>
+        <textarea @bind="scanText" placeholder="https://… or the copied page"></textarea>
+        <div class="row"><button class="btn" disabled="@scanning" @onclick="ScanAsync">@(scanning ? "Checking links…" : "Find links")</button></div>
+        @if (scanError is not null) { <p class="error tiny">@scanError</p> }
+        @if (found is not null)
+        {
+            @if (found.Count == 0) { <p class="muted">No bitdocs share links found.</p> }
+            else
+            {
+                <h3>Found @found.Count link(s)</h3>
+                @foreach (var f in found)
+                {
+                    <label class="found">
+                        @if (f.Status == "new") { <input type="checkbox" checked="@selected.Contains(f.Link.Guid)" @onchange="e => Toggle(f.Link.Guid, (bool)e.Value!)" /> }
+                        else { <span class="check-gap"></span> }
+                        <span class="tag @f.Status">@(f.Status switch { "new" => "new", "added" => "already added", _ => "not available" })</span>
+                        <span>@(f.Title ?? f.Link.Url)</span>
+                    </label>
+                }
+                @if (found.Any(f => f.Status == "new"))
+                {
+                    <div class="row">
+                        <label class="field grow"><span>Folder for the new ones</span><input type="text" @bind="scanFolder" list="folders" placeholder="Course Name/Docs" /></label>
+                        <button class="btn primary" disabled="@(selected.Count == 0)" @onclick="AddSelectedAsync">Add selected</button>
+                    </div>
+                }
+            }
+        }
+    </div>
+    <datalist id="folders">@foreach (var f in folders) { <option value="@f"></option> }</datalist>
+</main>
+
+@code {
+    private string url = "", folder = "", scanText = "", scanFolder = "";
+    private string? addMessage, scanError;
+    private bool addFailed, adding, scanning;
+    private List<FoundLink>? found;
+    private readonly HashSet<string> selected = [];
+    private List<string> folders = [];
+
+    protected override void OnInitialized() => folders = Docs.FolderSuggestions();
+
+    private async Task AddAsync()
+    {
+        adding = true;
+        try
+        {
+            var (doc, err) = await Docs.AddAsync(url, folder);
+            addFailed = doc is null;
+            if (doc is null) { addMessage = err; return; }
+            var started = Runner.TryStart([doc.Guid], "added", "Downloading " + doc.Title);
+            addMessage = $"Added “{doc.Title}”" + (started == SyncStart.Started ? ", downloading…" : ". It downloads when the current sync finishes.");
+            url = "";
+        }
+        finally { adding = false; }
+    }
+
+    private async Task ScanAsync()
+    {
+        scanning = true;
+        scanError = null;
+        try
+        {
+            var (list, err) = await Scanner.ScanAsync(scanText);
+            scanError = err;
+            found = err is null ? list : null;
+            selected.Clear();
+            foreach (var f in list.Where(f => f.Status == "new")) selected.Add(f.Link.Guid);
+        }
+        finally { scanning = false; }
+    }
+
+    private void Toggle(string guid, bool on) { if (on) selected.Add(guid); else selected.Remove(guid); }
+
+    private async Task AddSelectedAsync()
+    {
+        try
+        {
+            var added = await Docs.AddManyAsync(found!.Where(f => selected.Contains(f.Link.Guid)).Select(f => (f.Link, f.Title)), scanFolder);
+            if (added.Count > 0) Runner.TryStart(added.Select(d => d.Guid).ToList(), "added", $"Downloading {added.Count} new doc(s)");
+            Nav.NavigateTo("./");
+        }
+        catch (ArgumentException e) { scanError = e.Message; }
+    }
+}

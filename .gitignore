@@ -1,4 +1,12 @@
+bin/
+obj/
+config/
 data/
+*.db
+*.db-shm
+*.db-wal
 .env
-__pycache__/
 .DS_Store
+.vs/
+.vscode/
+.idea/

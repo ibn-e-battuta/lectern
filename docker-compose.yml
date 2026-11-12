@@ -1,0 +1,20 @@
+# Lectern: copy this file, change the paths, then: docker compose up -d
+services:
+  lectern:
+    image: ghcr.io/ibn-e-battuta/lectern:latest   # or use `build: .` to build from source
+    container_name: lectern
+    # Run as your own user so the documents Lectern writes are yours. Find your ids with `id -u` / `id -g`.
+    user: "1000:1000"
+    ports:
+      - "8790:8080"
+    volumes:
+      - /path/to/your/courses:/courses   # documents are written into the course folders you choose
+      - ./config:/config                 # database, sign-in keys, history, log
+    environment:
+      TZ: Europe/London                  # the sync schedule uses this time zone
+      # Create the admin automatically instead of using the setup page:
+      # LECTERN_ADMIN_USER: admin
+      # LECTERN_ADMIN_PASSWORD: change-me-please
+      # Behind a reverse proxy (Nginx Proxy Manager, Caddy, Traefik, SWAG…):
+      # Lectern__TrustForwardedHeaders: "true"
+    restart: unless-stopped

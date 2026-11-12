@@ -1,0 +1,64 @@
+@page "/news"
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LecternDb> DbFactory
+@inject DocReader Reader
+@inject DocsService Docs
+@inject LecternOptions Options
+
+<PageTitle>What's new · Lectern</PageTitle>
+<TopNav />
+
+<main class="page">
+    <div class="page-head"><h1>What's new</h1><span class="muted tiny">Newest first. Updated pages show what changed.</span></div>
+    @if (runs is null) { }
+    else if (runs.Count == 0)
+    {
+        <div class="card empty">Nothing yet. This fills in when a sync finds new or changed pages.</div>
+    }
+    else
+    {
+        @foreach (var run in runs)
+        {
+            <div class="card news">
+                <h2>@run.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm") <span class="muted tiny">@run.Trigger</span></h2>
+                @foreach (var doc in run.Changes.GroupBy(c => (c.DocGuid, c.DocTitle, c.DocFolder)))
+                {
+                    <h3>@doc.Key.DocTitle</h3>
+                    <div class="muted tiny path">@doc.Key.DocFolder</div>
+                    <ul>
+                        @foreach (var c in doc)
+                        {
+                            <li>
+                                <strong>@c.Kind</strong>:
+                                @if (Link(c) is { } href) { <a class="accent" href="@href">@PageName(c.Path)</a> } else { @c.Path }
+                                @if (c.Diff is { Length: > 0 } diff)
+                                {
+                                    <details><summary>Show what changed</summary><DiffView Text="@diff" /></details>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+    }
+</main>
+
+@code {
+    private List<SyncRun>? runs;
+    private Dictionary<string, (string Doc, string Page)> pages = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        runs = await db.SyncRuns.AsNoTracking().Include(r => r.Changes).Where(r => r.Changes.Any())
+            .OrderByDescending(r => r.StartedAt).Take(60).ToListAsync();
+        foreach (var d in await Reader.DocsAsync())
+            foreach (var p in d.Pages) pages[d.Info.Folder + "/" + p.Path] = (d.Guid, p.Guid);
+    }
+
+    private string? Link(ChangeEntry c) =>
+        c.Path.EndsWith(".md", StringComparison.Ordinal) && pages.TryGetValue(c.DocFolder + "/" + c.Path, out var p) ? $"read/{p.Doc}/{p.Page}" : null;
+
+    private static string PageName(string path) => Path.GetFileNameWithoutExtension(path);
+}

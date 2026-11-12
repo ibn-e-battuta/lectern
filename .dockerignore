@@ -1,4 +1,22 @@
-# only the app code goes into the image
-*
-!app/
-app/__pycache__
+bin/
+obj/
+config/
+data/history.git
+data/site
+data/*.txt
+data/*.json
+data/*.md
+data/*.log
+app/
+tests/
+*.db
+*.db-*
+**/.DS_Store
+.vs/
+.vscode/
+.idea/
+.git/
+.env
+docker-compose*.yml
+dotnet-tools.json
+lectern

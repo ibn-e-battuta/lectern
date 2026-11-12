@@ -1,0 +1,76 @@
+@page "/history"
+@inject HistoryService History
+@inject SettingsService Settings
+@inject IJSRuntime JS
+
+<PageTitle>History · Lectern</PageTitle>
+<TopNav />
+
+<main class="page">
+    <div class="card">
+        <h2>Snapshots</h2>
+        <p class="muted tiny">A snapshot of every document folder is saved after each sync@(historyOn ? "" : " (turned off in Settings)"). Open one to see what changed, or put a file back as it was.</p>
+        @if (snapshots.Count == 0) { <div class="empty">No snapshots yet.</div> }
+        @foreach (var (s, i) in snapshots.Select((s, i) => (s, i)))
+        {
+            <button class="snap @(selected?.Snapshot.Sha == s.Sha ? "on" : "")" @onclick="() => Open(s.Sha)">
+                <code>@s.Sha[..7]</code>
+                <span class="muted tiny">@s.When.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</span>
+                <span>@Summary(s.Message, first: i == snapshots.Count - 1)</span>
+            </button>
+        }
+    </div>
+
+    @if (selected is { } d)
+    {
+        <div class="card">
+            <h2>Snapshot @d.Snapshot.Sha[..7]</h2>
+            @if (message is not null) { <p class="notice">@message</p> }
+            <table class="files">
+                @foreach (var f in d.Files)
+                {
+                    <tr>
+                        <td class="path">@f.Path</td>
+                        <td class="muted tiny">@f.Status</td>
+                        <td class="tiny"><span class="good">+@f.Added</span> <span class="error">−@f.Deleted</span></td>
+                        <td>@if (f.Status != "Deleted") { <button class="btn small" @onclick="() => RestoreAsync(d.Snapshot.Sha, f.Path)">Restore this version</button> }</td>
+                    </tr>
+                }
+            </table>
+            <h3>Text changes</h3>
+            @if (d.Diff.Trim().Length > 0) { <DiffView Text="@d.Diff" /> }
+            else { <p class="muted">No text changes (images or re-rendering only).</p> }
+        </div>
+    }
+</main>
+
+@code {
+    private List<Snapshot> snapshots = [];
+    private SnapshotDetail? selected;
+    private bool historyOn = true;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        historyOn = (await Settings.OptionsAsync()).History;
+        snapshots = await Task.Run(() => History.List());
+    }
+
+    private async Task Open(string sha)
+    {
+        message = null;
+        selected = await Task.Run(() => History.Show(sha));
+    }
+
+    private async Task RestoreAsync(string sha, string path)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Put back {path} as it was in {sha[..7]}?\n\nIf the page changes online, the next sync updates it again.")) return;
+        message = History.Restore(sha, path) ?? $"Restored {path}.";
+    }
+
+    private static string Summary(string m, bool first)
+    {
+        var s = System.Text.RegularExpressions.Regex.Replace(m, @"^Sync [\d-]+ [\d:]+( - )?", "");
+        return s.Length > 0 ? s : first ? "First snapshot" : "Re-rendered pages";
+    }
+}

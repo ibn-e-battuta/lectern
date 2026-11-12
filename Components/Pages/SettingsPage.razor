@@ -1,0 +1,157 @@
+@page "/settings"
+@inject SettingsService Settings
+@inject UserService Users
+@inject PdfBuilder Pdf
+@inject LecternOptions Options
+@inject NavigationManager Nav
+
+<PageTitle>Settings · Lectern</PageTitle>
+<TopNav />
+
+<main class="page narrow">
+    <div class="card">
+        <h2>Automatic sync</h2>
+        <label class="switch">
+            <span>Sync automatically<br /><span class="muted tiny">@saved.Describe()@(next is { } n ? $" · next: {Format.When(n)}" : "")</span></span>
+            <input type="checkbox" @bind="enabled" @bind:after="SaveScheduleAsync" />
+        </label>
+        <div class="field"><span>How often</span>
+            <div class="seg">
+                <button class="@(mode == "daily" ? "on" : "")" @onclick='() => mode = "daily"'>Every day</button>
+                <button class="@(mode == "weekdays" ? "on" : "")" @onclick='() => mode = "weekdays"'>Weekdays</button>
+                <button class="@(mode == "every" ? "on" : "")" @onclick='() => mode = "every"'>Every few hours</button>
+            </div>
+        </div>
+        @if (mode == "every")
+        {
+            <label class="field"><span>Every … hours</span><input type="number" min="1" step="1" @bind="hours" class="short" /></label>
+        }
+        else
+        {
+            <div class="field"><span>At</span>
+                <div class="times">
+                    @for (var i = 0; i < times.Count; i++)
+                    {
+                        var at = i;
+                        <input type="time" value="@times[at]" @onchange="e => times[at] = e.Value?.ToString() ?? times[at]" />
+                        @if (times.Count > 1) { <button class="btn small ghost" @onclick="() => times.RemoveAt(at)">✕</button> }
+                    }
+                    <button class="btn small" @onclick='() => times.Add("21:00")'>+ Add time</button>
+                </div>
+            </div>
+        }
+        @if (scheduleError is not null) { <p class="error tiny">@scheduleError</p> }
+        <div class="row"><button class="btn primary" @onclick="SaveScheduleAsync">Save schedule</button>@if (scheduleSaved) { <span class="good tiny">Saved</span> }</div>
+        <p class="muted tiny">Times use the server's time zone (@TimeZoneInfo.Local.Id; set <code>TZ</code> to change it). Runs missed while Lectern was stopped happen as soon as it's back.</p>
+    </div>
+
+    <div class="card">
+        <h2>After each sync</h2>
+        <label class="switch">
+            <span>Rebuild PDFs<br /><span class="muted tiny">For documents that changed. @(Pdf.Chromium is null ? "No Chrome or Chromium found, so PDFs are skipped." : "")</span></span>
+            <input type="checkbox" checked="@options.Pdf" @onchange="e => SaveOptionsAsync(options with { Pdf = (bool)e.Value! })" />
+        </label>
+        <label class="switch">
+            <span>Save a history snapshot<br /><span class="muted tiny">So you can see or undo changes.</span></span>
+            <input type="checkbox" checked="@options.History" @onchange="e => SaveOptionsAsync(options with { History = (bool)e.Value! })" />
+        </label>
+        <label class="switch">
+            <span>Download uploaded videos<br /><span class="muted tiny">Hosted players like YouTube stay as links.</span></span>
+            <input type="checkbox" checked="@options.Videos" @onchange="e => SaveOptionsAsync(options with { Videos = (bool)e.Value! })" />
+        </label>
+    </div>
+
+    <div class="card">
+        <h2>Account</h2>
+        <p class="muted tiny">Signed in as <strong>@userName</strong>.</p>
+        <div class="row">
+            <label class="field grow"><span>Current password</span><input type="password" @bind="currentPassword" autocomplete="current-password" /></label>
+            <label class="field grow"><span>New password</span><input type="password" @bind="newPassword" autocomplete="new-password" /></label>
+            <button class="btn" @onclick="ChangePasswordAsync">Change password</button>
+        </div>
+        @if (passwordError is not null) { <p class="error tiny">@passwordError</p> }
+        <form method="post" action="logout"><button class="btn ghost" type="submit">Sign out</button></form>
+    </div>
+
+    <div class="card">
+        <h2>About</h2>
+        <dl class="kv">
+            <dt>Version</dt><dd>Lectern @AppInfo.Version</dd>
+            <dt>Courses folder</dt><dd><code>@Options.CoursesPath</code></dd>
+            <dt>Data folder</dt><dd><code>@Options.ConfigPath</code></dd>
+            <dt>PDF printer</dt><dd>@(Pdf.Chromium ?? "not found")</dd>
+        </dl>
+    </div>
+</main>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    private Schedule saved = new();
+    private SyncOptions options = new();
+    private DateTime? next;
+    private string mode = "daily";
+    private List<string> times = [];
+    private double hours = 6;
+    private bool enabled = true, scheduleSaved;
+    private string? scheduleError, passwordError;
+    private string currentPassword = "", newPassword = "";
+    private string userName = "";
+    private int userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState!).User;
+        userName = user.Identity?.Name ?? "";
+        userId = user.GetUserId() ?? 0;
+        options = await Settings.OptionsAsync();
+        await LoadScheduleAsync();
+    }
+
+    private async Task LoadScheduleAsync()
+    {
+        saved = await Settings.ScheduleAsync();
+        next = saved.Next(DateTime.Now, await Settings.LastScheduledRunAsync());
+        mode = saved.Mode;
+        times = saved.Times.ToList();
+        hours = saved.Hours;
+        enabled = saved.Enabled;
+    }
+
+    private async Task SaveScheduleAsync()
+    {
+        scheduleError = null;
+        scheduleSaved = false;
+        Schedule s;
+        if (mode == "every")
+        {
+            if (hours < 1) { scheduleError = "At least 1 hour."; return; }
+            s = new Schedule { Mode = "every", Hours = hours, Enabled = enabled, Times = saved.Times };
+        }
+        else
+        {
+            var clean = new List<string>();
+            foreach (var t in times)
+            {
+                if (!Schedule.TryParseTime(t, out var ts)) { scheduleError = "Times look like 09:00."; return; }
+                clean.Add($"{ts.Hours:00}:{ts.Minutes:00}");
+            }
+            s = new Schedule { Mode = mode, Times = clean.Distinct().Order(StringComparer.Ordinal).DefaultIfEmpty("09:00").ToList(), Enabled = enabled, Hours = saved.Hours };
+        }
+        await Settings.SaveScheduleAsync(s);
+        await LoadScheduleAsync();
+        scheduleSaved = true;
+    }
+
+    private async Task SaveOptionsAsync(SyncOptions o)
+    {
+        await Settings.SaveOptionsAsync(o);
+        options = o;
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        passwordError = await Users.ChangePasswordAsync(userId, currentPassword, newPassword);
+        currentPassword = newPassword = "";
+        if (passwordError is null) Nav.NavigateTo("login?changed=1", forceLoad: true);
+    }
+}

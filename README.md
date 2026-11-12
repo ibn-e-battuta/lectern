@@ -1,20 +1,19 @@
 # Lectern
 
-Lectern keeps local copies of course documents published on **bit.ai / bitdocs.ai** and keeps them up to date. Give it the share links of the docs that come with your courses. It downloads every page, image and attachment into the matching course folder, checks for changes on a schedule, and tells you exactly what changed.
+Lectern keeps local copies of course documents published on **bit.ai / bitdocs.ai** and keeps them up to date. Give it the share links of the documents that come with your courses. It downloads every page, image and attachment into the matching course folder, checks for changes on a schedule, and tells you exactly what changed.
 
-It runs as a single Docker container with a web UI, and works on its own or next to [Lyceum](https://github.com/ibn-e-battuta/lyceum), the self-hosted video course player.
+It's a self-hosted web app (.NET 10, Blazor) that runs as one Docker container. It works on its own or next to [Lyceum](https://github.com/ibn-e-battuta/lyceum), the self-hosted video course player.
 
 - [How it works](#how-it-works)
 - [Features](#features)
-- [Quick start](#quick-start)
+- [Quick start (Docker)](#quick-start-docker)
 - [Using Lectern](#using-lectern)
 - [What Lectern writes, and where](#what-lectern-writes-and-where)
 - [Configuration](#configuration)
 - [Running Lectern with Lyceum](#running-lectern-with-lyceum)
-- [Running without Docker](#running-without-docker)
 - [Security and privacy](#security-and-privacy)
 - [Troubleshooting](#troubleshooting)
-- [Project layout](#project-layout)
+- [Running from source](#running-from-source)
 
 ## How it works
 
@@ -22,8 +21,8 @@ It runs as a single Docker container with a web UI, and works on its own or next
  bitdocs.ai share links ──▶  Lectern  ──▶  your courses folder
  (one per document)          │              Course A/Docs/  ← Markdown, images, attachments, PDF
                              │              Course B/Docs/
-                             └──▶  Lectern's data folder
-                                   links, settings, history, What's new, docs site
+                             └──▶  /config
+                                   database, history, sign-in keys, log
 ```
 
 1. **You add a share link** (`https://<org>.bitdocs.ai/share/d/<id>`) and choose the course folder it belongs in, for example `Mastering C#/Docs`.
@@ -31,28 +30,25 @@ It runs as a single Docker container with a web UI, and works on its own or next
 3. **Each page becomes a Markdown file**, numbered in reading order, with its images and attachments saved next to it. Links between pages point at the local files.
 4. **Changes are detected by content.** On each sync Lectern compares every page with the previous version and rewrites only what changed. New, updated, renamed and removed pages are recorded, along with the changed text.
 5. **After each sync it can also:**
-   - rebuild a PDF of each changed document
-   - rebuild a searchable docs website
-   - save a git snapshot, so any earlier version can be restored
-6. **A built-in scheduler** repeats this daily, on weekdays or every few hours. Any run missed while the computer slept or Docker was stopped happens as soon as the container is back.
+   - rebuild a PDF of each changed document;
+   - save a history snapshot, so any earlier version can be restored.
+6. **A built-in scheduler** repeats this daily, on weekdays or every few hours. A run missed while the container was stopped happens as soon as it's back.
 
 Lectern only reads public share links. It never needs your bit.ai account or password.
 
 ## Features
 
 - **Complete copies:** pages, headings, lists, tables, code blocks, callouts, images and attachments (zip, PDF, …), with internal links rewritten to the local files.
-- **Change tracking:**
-  - `WHATS-NEW.md`, one page across all your courses
-  - a `CHANGES.md` per document
-  - the exact text that changed in every updated page
-- **History:** a git snapshot after every sync. Browse any snapshot's diff, and restore a file as it was.
-- **PDF export:** one PDF per document with a cover page and table of contents, rebuilt only when the document changes.
-- **Docs website:** every document in one site, with a sidebar per course, full-text search, previous/next navigation and dark mode.
-- **Tidy by design:** renamed or reordered pages, moved folders and removed images are cleaned up. Lectern only ever deletes files it created, and pages removed online are kept locally.
-- **Safe to run anytime:** only one sync runs at a time, and a sync that fails partway keeps what it finished.
-- **Web UI and command line**, plus an installable web app (PWA).
+- **Reader:** every document in one place, with an outline per course, previous/next, copy buttons on code and dark mode. It works on phones.
+- **Search** across all downloaded pages.
+- **Change tracking:** *What's new* across all documents, a `CHANGES.md` per document, and the exact text that changed in every updated page.
+- **History:** a snapshot after every sync. Browse what each one changed and put any file back as it was.
+- **PDF export:** one PDF per document with a cover page and contents, rebuilt only when the document changes.
+- **Tidy by design:** renamed or reordered pages, moved folders and removed images are cleaned up. Lectern only deletes files it created, and pages removed online are kept locally.
+- **Safe to run any time:** one sync at a time (documents added meanwhile are queued), and a sync that fails partway keeps what it finished.
+- **Sign-in:** an admin account, created on first visit.
 
-## Quick start
+## Quick start (Docker)
 
 **Requirements:** Docker with Compose v2, and a folder for your courses that Lectern may write into.
 
@@ -63,97 +59,57 @@ services:
     image: ghcr.io/ibn-e-battuta/lectern:latest
     user: "1000:1000"                         # your user and group id (`id -u`, `id -g`)
     ports:
-      - "127.0.0.1:8790:8790"                 # web UI, this machine only
+      - "8790:8080"
     volumes:
       - /path/to/your/courses:/courses        # documents are written here
-      - ./lectern-data:/data                  # links, settings, history
+      - ./config:/config                      # database, history, sign-in keys
     environment:
       TZ: Europe/London                       # the schedule uses this time zone
     restart: unless-stopped
 ```
 
 ```bash
-mkdir -p lectern-data && docker compose up -d
+mkdir -p config && docker compose up -d
 ```
 
-Open **http://localhost:8790**, go to **Add**, paste a share link, choose a folder and click **Add & download**. The default schedule syncs every day at 09:00 in your `TZ`.
+Open **http://localhost:8790** (or `http://<server>:8790`) and create the admin account. Then go to **Add**, paste a share link, choose a folder and click **Add & download**. The default schedule syncs every day at 09:00 in your `TZ`.
 
-To update: `docker compose pull && docker compose up -d`.
+To update: `docker compose pull && docker compose up -d`. Database changes are applied automatically on startup.
 
-### From source
-
-```bash
-git clone https://github.com/ibn-e-battuta/lectern.git && cd lectern
-cp .env.example .env        # set COURSES_DIR, HOST_UID/HOST_GID and TZ
-docker compose up -d --build
-```
-
-This uses the repository's `compose.yaml`, which builds the image from your clone and keeps its data in `./data`. Update with `git pull && docker compose up -d --build`.
+[`docker-compose.yml`](docker-compose.yml) in this repository has the same service with the optional settings commented in.
 
 ### Images and releases
 
-Ready-made images for **amd64** and **arm64** are published to GitHub Container Registry:
+Images for **amd64** and **arm64** are published to GitHub Container Registry:
 
 | Tag | Contains |
 |---|---|
 | `ghcr.io/ibn-e-battuta/lectern:latest` | the newest release |
-| `:0.1.0`, `:0.1` | a specific release (pin one of these for predictable upgrades) |
+| `:0.2.0`, `:0.2` | a specific release (pin one of these for predictable upgrades) |
 | `:edge` | the latest commit on `main` |
 
-A release is made by pushing a version tag such as `v0.2.0`. The workflow then publishes the versioned images and `:latest`, and creates a [GitHub Release](https://github.com/ibn-e-battuta/lectern/releases) whose notes come from the tag's message. Ordinary pushes to `main` only update `:edge`.
+To release: bump `<Version>` in `Lectern.csproj`, commit, then push an annotated tag such as `v0.2.0` (`git tag -a v0.2.0 && git push origin main v0.2.0`). The workflow runs the tests, publishes the versioned images and `:latest`, and creates a [GitHub Release](https://github.com/ibn-e-battuta/lectern/releases) whose notes are the tag's message. Pushes to `main` only update `:edge`.
 
 ## Using Lectern
 
-### Web UI
-
-| Tab | What you can do |
+| Page | What it's for |
 |---|---|
-| **Docs** | Every document with its page count and last sync. **Read** it in the docs site, open its **PDF**, open it **Online**, **Sync** it now, rebuild its PDF, **Move** it to another folder, or **Remove** it (local files are kept) |
-| **Add** | Paste a share link and choose a folder. Or paste a whole course page (its text or HTML) to find every document link on it and add the new ones together |
-| **Search** | Full-text search across all downloaded documents |
-| **What's new** | Everything new, updated, renamed or removed, newest first, with the changed text |
-| **History** | One snapshot per sync; select one to see its changes |
-| **Activity** | The sync log, live |
-| **Settings** | The schedule (daily, weekdays or every N hours, or off) and the after-sync options |
+| **Documents** | Every document with its folder, page count and last sync. Read it, open the PDF or the online version, sync it, rebuild its PDF, move it to another folder, or stop syncing it (its files stay) |
+| **Add** | Add a share link, or find every link on a course page. Paste the page's address, or, when the page needs a login, its copied text or source |
+| **Read** | Read any downloaded document, with an outline per course |
+| **Search** | Search every downloaded page. All words must match |
+| **What's new** | New, updated, renamed and removed pages from each sync, newest first, with the changed text |
+| **History** | Snapshots after each sync: what changed, and **Restore this version** for any file |
+| **Activity** | The live log |
+| **Settings** | Schedule, after-sync options, your password |
 
-The header shows whether a sync is running or when the next one is due. It also has **Sync now** and **Open docs site** buttons. The docs site is at **http://localhost:8790/site**.
-
-### Command line
-
-Every command runs in a one-off container, so it works whether or not the Lectern service is running:
-
-```bash
-docker compose run --rm lectern help
-docker compose run --rm lectern version
-docker compose run --rm lectern add https://<org>.bitdocs.ai/share/d/<id> "Mastering C#/Docs"
-docker compose run --rm lectern sync
-docker compose run --rm lectern search dependency injection
-docker compose run --rm lectern schedule weekdays 09:00 21:00
-```
-
-On macOS and Linux the `lectern` script in this repository is a shorter way to do the same thing. Link it onto your `PATH` (for example `ln -s "$PWD/lectern" /usr/local/bin/lectern`) and run `lectern start`, `lectern ui`, `lectern add …` or `lectern status`. It also handles the parts that need the host machine:
-- `lectern scan --clipboard` reads copied text.
-- `lectern scan ~/Downloads/page.html` scans a saved course page.
-
-| Command | Does |
-|---|---|
-| `sync [LINK…]` | sync everything, or only the given links |
-| `add LINK [FOLDER]` · `move LINK FOLDER` · `remove LINK` · `list` | manage documents (`remove` keeps the files) |
-| `scan URL\|FILE\|-` | find document links on a page; add `--add --folder FOLDER` to add them all |
-| `search WORDS…` | search downloaded documents |
-| `site` · `pdf [DOC\|all]` | rebuild the docs site or PDFs |
-| `history` · `history show SHA` · `history restore PATH SHA` | browse and restore snapshots |
-| `schedule [daily\|weekdays TIME…\|every 6h\|off\|on]` | show or change the schedule |
-| `config [site\|pdf\|git\|videos on\|off]` | after-sync options |
-| `start` · `stop` · `status` · `logs` · `rebuild` · `ui` | manage the container (`lectern` script only) |
-
-`FOLDER` is always a path inside your courses folder.
+**Sync now** in the top bar syncs everything. The status next to it shows what's running, or when the next sync is due.
 
 ## What Lectern writes, and where
 
-Lectern keeps **document content in your courses folder** and **everything else in its own data folder**. Your courses folder gets no extra top-level files.
+Lectern keeps **document content in your courses folder** and **everything else in `/config`**. Your courses folder gets no extra top-level files.
 
-**Courses folder** (`COURSES_DIR`, mounted at `/courses`): only inside the folders you choose for each document.
+**Courses folder** (mounted at `/courses`): only inside the folders you choose.
 
 ```
 Mastering C#/
@@ -166,49 +122,51 @@ Mastering C#/
     ├── assets/                      ← images and attachments
     ├── Course Guide.pdf
     ├── CHANGES.md                   ← this document's change log
-    └── README.md                    ← table of contents
+    ├── README.md                    ← table of contents
+    ├── .sync-state.json             ← what was downloaded (Lyceum also uses it to recognise the folder)
+    └── .raw/                        ← each page's original JSON, for the reader and PDF
 ```
 
 When several documents share one folder, each gets its own sub-folder named after its title.
 
-**Data folder** (`./data`, mounted at `/data`):
+**`/config`:**
 
 | Path | Contents |
 |---|---|
-| `links.txt` | your documents: one share link per line, optionally `-> Folder` |
-| `config.json` | schedule and after-sync options |
-| `WHATS-NEW.md` | changes across all documents, newest first |
-| `site/` | the docs website served at `/site` |
+| `lectern.db` | accounts, documents, settings and What's new |
 | `history.git/` | snapshots of the document folders (only those; nothing else in the courses folder is tracked) |
-| `registry.json`, `sync.log` | where each document was last synced; the log |
+| `keys/` | keys for the sign-in cookie. Keep them, or everyone is signed out |
+| `lectern.log` | the activity log |
 
-Back up the data folder to keep your links, settings and history.
+Back up `/config` to keep your documents list, settings and history.
 
 ## Configuration
 
-### Environment (`.env`)
+Environment variables (the `__` is two underscores):
 
-| Variable | Default | Description |
+| Variable | Default | Meaning |
 |---|---|---|
-| `COURSES_DIR` | *(required)* | Host path of your courses folder. Lectern needs write access. |
-| `HOST_UID` / `HOST_GID` | `1000` / `1000` | The user and group the container runs as, so the files it writes belong to you. Use `id -u` and `id -g`. |
-| `TZ` | `UTC` | Time zone for the schedule, for example `Europe/London`. |
-| `LECTERN_PORT` | `8790` | Port of the web UI on the host. It is bound to `127.0.0.1` only. |
+| `TZ` | `Etc/UTC` | Time zone for the schedule and dates |
+| `LECTERN_ADMIN_USER`, `LECTERN_ADMIN_PASSWORD` | – | Create the admin on first start instead of using the setup page |
+| `Lectern__TrustForwardedHeaders` | `false` | Set to `true` behind a reverse proxy so Lectern sees the real client address and scheme |
+| `Lectern__CoursesRoot` | `/courses` | Where documents are written |
+| `Lectern__ConfigFolder` | `/config` | Database, history, keys and log |
+| `Lectern__Chromium` | the image's Chromium | Browser used to print PDFs |
 
-### Options (Settings tab or `lectern config`)
+**Settings** in the app:
 
 | Option | Default | When on |
 |---|---|---|
-| `site` | on | Rebuild the docs website after each sync |
-| `pdf` | on | Rebuild the PDF of each changed document (headless Chromium inside the image) |
-| `git` | on | Save a history snapshot after each sync |
-| `videos` | on | Download video and audio files uploaded to a document. Hosted players such as YouTube stay as links |
+| Sync automatically | daily 09:00 | Every day or on weekdays at one or more times, or every few hours |
+| Rebuild PDFs | on | Rebuild the PDF of each changed document |
+| Save a history snapshot | on | Snapshot the document folders after each sync |
+| Download uploaded videos | on | Download video and audio files uploaded to a document. Hosted players such as YouTube stay as links |
 
-Changes made in the UI or with `lectern schedule` / `lectern config` are saved to `data/config.json` and picked up by the running container within a minute.
+Lectern's interface uses a live **WebSocket** connection (Blazor Server), so a reverse proxy must forward WebSocket upgrades, the same as for Lyceum.
 
 ## Running Lectern with Lyceum
 
-[Lyceum](https://github.com/ibn-e-battuta/lyceum) is a self-hosted player for video courses. The two apps are independent and never call each other. They work together through the **courses folder they share**:
+The two apps are independent and never call each other. They work together through the **courses folder they share**:
 
 - **Lectern writes** each course's documents into that course's folder.
 - **Lyceum reads** the same folder (read-only is enough) and shows them with the course. A `Docs` folder appears as its own section, after the course's other sections:
@@ -216,9 +174,7 @@ Changes made in the UI or with `lectern schedule` / `lectern config` are saved t
   - the whole-document **PDF**, `README.md` and `CHANGES.md` are that section's downloads.
 - **New documents show up in Lyceum by themselves.** It watches the folder, or rescans every 30 minutes where file watching isn't available (network shares, Docker Desktop).
 
-Either app can run alone, and either can be stopped without affecting the other.
-
-### Both in one compose file
+Both in one compose file:
 
 ```yaml
 # docker-compose.yml
@@ -239,81 +195,84 @@ services:
     image: ghcr.io/ibn-e-battuta/lectern:latest
     user: "1000:1000"
     ports:
-      - "127.0.0.1:8790:8790"
+      - "8790:8080"
     volumes:
       - /path/to/courses:/courses                       # Lectern writes the documents
-      - ./lectern-data:/data
+      - ./lectern-config:/config
     environment:
       TZ: Europe/London
     restart: unless-stopped
 ```
 
 ```bash
-mkdir -p lyceum-config lectern-data && docker compose up -d
+mkdir -p lyceum-config lectern-config && docker compose up -d
 ```
 
-- **Lyceum:** http://localhost:8080. Create the admin account on first visit.
-- **Lectern:** http://localhost:8790.
+- **Lyceum:** http://localhost:8080. Create its admin account on first visit.
+- **Lectern:** http://localhost:8790. Create its admin account on first visit.
 
 Start, stop or update either one alone with `docker compose up -d lyceum`, `docker compose stop lectern`, and so on.
 
-### Keeping Lectern in its own folder
-
-If you run Lectern from a clone of this repository (see [From source](#from-source)), include its compose file instead of copying the service definition:
-
-```yaml
-# docker-compose.yml, next to the lectern/ clone
-name: courses               # use the same name in lectern/compose.yaml (it is "courses" by default)
-include:
-  - path: ./lectern/compose.yaml
-    env_file: ./lectern/.env
-services:
-  lyceum:
-    # … as above …
-```
-
-With the same project name, `docker compose up -d` in either folder manages the same Lectern container, so it never runs twice.
-
-## Running without Docker
-
-Lectern uses only the Python 3.9+ standard library. PDFs additionally need Google Chrome, Chromium or Microsoft Edge, and history needs git.
-
-```bash
-export LECTERN_ROOT=/path/to/courses LECTERN_DATA=$PWD/data
-python3 app/lectern.py sync         # one sync
-python3 app/lectern.py serve        # web UI on http://127.0.0.1:8790 and the scheduler
-```
-
 ## Security and privacy
 
-- The web UI has no login. It listens on `127.0.0.1` only, and it rejects state-changing requests that come from other websites. Don't publish its port to your network.
-- It serves files from the courses folder read-only, and only from inside that folder.
-- Lectern only connects to the bitdocs.ai address of each share link, bit.ai's file CDN, and any other host a document embeds images or files from.
-- Your links, settings and history stay in the data folder. They are git-ignored in this repository.
+- Every page and file needs a signed-in account. The first account is created on the setup page (or from `LECTERN_ADMIN_USER`/`LECTERN_ADMIN_PASSWORD`). After 8 wrong passwords, that username and address are blocked for 15 minutes. Changing your password signs out your other sessions.
+- Lectern serves files only from the document folders it manages, never other files in the courses folder, and never hidden files such as `.sync-state.json`.
+- Lectern only connects to the bitdocs.ai address of each share link, bit.ai's file CDN, any other host a document embeds images or files from, and a course page you ask it to scan.
+- Document content is shown as HTML that Lectern builds itself. Scripts and `javascript:` links from documents are never included.
+- If you expose Lectern to the internet, put it behind HTTPS.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
 | "That link doesn't exist or isn't shared publicly" | The document isn't shared publicly. Ask for a public share link |
-| Files are owned by root, or "permission denied" | Set `HOST_UID`/`HOST_GID` in `.env` to your own ids and recreate the container |
-| Scheduled syncs don't happen | The container must be running at the scheduled time. Missed runs happen when it starts. On a desktop, let Docker start at login |
-| A course page shows no links in **Add** | Course pages usually need a login. Paste the page's text or HTML instead of its address |
-| Schedule times are off by hours | Set `TZ` in `.env` |
+| Files are owned by root, or "permission denied" | Set `user:` to your own ids (`id -u`, `id -g`) and recreate the container |
+| Scheduled syncs don't happen | The container must be running at the scheduled time. Missed runs happen when it starts |
+| A course page shows no links in **Add** | Course pages usually need a login. Paste the page's text or source instead of its address |
+| Schedule times are off by hours | Set `TZ` |
+| The page doesn't respond behind a proxy | Forward WebSocket upgrades, and set `Lectern__TrustForwardedHeaders=true` |
 
-Logs: the **Activity** tab, `docker compose logs -f lectern`, or `data/sync.log`.
+Logs: the **Activity** page, `docker compose logs -f lectern`, or `/config/lectern.log`.
 
-## Project layout
+## Running from source
+
+Requirements: the .NET 10 SDK. PDF export needs Google Chrome, Chromium or Microsoft Edge; it's found automatically.
+
+```bash
+Lectern__CoursesRoot=~/Courses dotnet run
+```
+
+That serves http://localhost:5000 and keeps its data in `./config`. Set `ASPNETCORE_URLS` to use another address.
+
+Tests:
+
+```bash
+dotnet test tests/Lectern.Tests
+```
+
+The converter is also checked against Markdown from earlier versions of Lectern. Those fixtures are real course pages, so they are not in the repository: set `LECTERN_GOLDEN` to a folder with `expected.json` and the page files to run that test.
+
+To change the database schema:
+
+```bash
+dotnet tool restore
+dotnet ef migrations add <Name> -o Data/Migrations
+```
+
+Project layout:
 
 ```
-app/
-├── lectern.py        command line, schedule and entry point
-├── lectern_sync.py   download, conversion to Markdown, change tracking, clean-up
-├── docsite.py        docs website and PDF export
-├── history.py        git snapshots of the document folders
-├── webui.py          web UI and JSON API
-└── static/           icons and web app manifest
-Dockerfile            Python 3.12, Chromium, git, fonts
-compose.yaml          the lectern service
-lectern               host script (macOS/Linux)
+Program.cs                 startup: database, sign-in, file serving
+Components/                Blazor pages (Documents, Add, Read, Search, What's new, History, Activity, Settings)
+Services/
+├── DocSync.cs             download a document, write pages and assets, track changes
+├── MarkdownConverter.cs   bitdocs pages (ProseMirror JSON) to Markdown
+├── HtmlRenderer.cs        the same pages as HTML for the reader and PDF
+├── SyncRunner.cs          one sync at a time, then PDFs and a snapshot
+├── Scheduler.cs           the automatic schedule
+├── PdfBuilder.cs          PDF export with headless Chromium
+├── HistoryService.cs      snapshots (LibGit2Sharp)
+└── …                      search, link scanner, settings, accounts
+Data/                      EF Core database and migrations
+tests/Lectern.Tests/       unit tests
 ```

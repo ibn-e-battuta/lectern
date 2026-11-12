@@ -1,0 +1,70 @@
+@page "/search"
+@inject SearchService Search
+@inject DocReader Reader
+@inject NavigationManager Nav
+
+<PageTitle>Search · Lectern</PageTitle>
+<TopNav />
+
+<main class="page">
+    <div class="card">
+        <input class="search wide" type="search" placeholder="Search all downloaded documents… (every word must match)" autofocus
+               @bind="query" @bind:event="oninput" @bind:after="QueueSearch" />
+        @if (results is not null)
+        {
+            <p class="muted tiny">@results.Count page(s)</p>
+            @foreach (var r in results)
+            {
+                <div class="result">
+                    <a class="accent" href="@(r.PageGuid is { } p ? $"read/{r.DocGuid}/{p}" : Reader.FileUrl(r.File))"><strong>@Highlight(r.Title)</strong></a>
+                    <span class="muted tiny">· @r.DocTitle</span>
+                    @foreach (var s in r.Snippets) { <div class="snippet">@Highlight(s)</div> }
+                </div>
+            }
+        }
+    </div>
+</main>
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    private string query = "";
+    private List<SearchHit>? results;
+    private CancellationTokenSource? pending;
+
+    protected override async Task OnInitializedAsync()
+    {
+        query = Q ?? "";
+        if (query.Length > 0) await RunAsync();
+    }
+
+    private async Task QueueSearch()
+    {
+        pending?.Cancel();
+        var cts = pending = new CancellationTokenSource();
+        try { await Task.Delay(250, cts.Token); }
+        catch (TaskCanceledException) { return; }
+        await RunAsync();
+        Nav.NavigateTo(query.Length > 0 ? $"search?q={Uri.EscapeDataString(query)}" : "search", replace: true);
+    }
+
+    private async Task RunAsync() => results = query.Trim().Length == 0 ? null : await Search.SearchAsync(query);
+
+    /// <summary>Marks the search words in a line.</summary>
+    private RenderFragment Highlight(string text) => builder =>
+    {
+        var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var seq = 0;
+        var i = 0;
+        while (i < text.Length)
+        {
+            var (at, len) = terms.Select(t => (At: text.IndexOf(t, i, StringComparison.OrdinalIgnoreCase), t.Length))
+                .Where(x => x.At >= 0).OrderBy(x => x.At).FirstOrDefault((-1, 0));
+            if (at < 0) { builder.AddContent(seq++, text[i..]); break; }
+            builder.AddContent(seq++, text[i..at]);
+            builder.OpenElement(seq++, "mark");
+            builder.AddContent(seq++, text.Substring(at, len));
+            builder.CloseElement();
+            i = at + len;
+        }
+    };
+}

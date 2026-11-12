@@ -1,0 +1,80 @@
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject SyncRunner Runner
+@inject SettingsService Settings
+@implements IDisposable
+
+<header class="topbar">
+    <a class="brand" href="./"><img src="icon.svg" alt="" width="28" height="28" /><span class="hide-mobile">Lectern</span></a>
+    <nav class="nav">
+        @foreach (var (href, label) in Links)
+        {
+            <a href="@(href == "/" ? "./" : href.TrimStart('/'))" class="@(IsActive(href) ? "active" : "")">@label</a>
+        }
+    </nav>
+    <span class="grow"></span>
+    <span class="pill @(Runner.Running is not null ? "busy" : "")" title="@scheduleText">
+        <span class="dot"></span>
+        <span>@(Runner.Running is { } r ? (Runner.Current is { } c ? $"{r}: {c}" : r) + "…" : next is { } n ? $"Next sync {Format.When(n)}" : "Automatic sync off")</span>
+    </span>
+    <button class="btn primary" disabled="@(Runner.Running is not null)" @onclick="SyncAll">Sync now</button>
+    <button class="icon-btn" title="Theme: @theme" @onclick="CycleTheme">@(theme switch { "light" => "☀", "dark" => "☾", _ => "◐" })</button>
+</header>
+
+@code {
+    private static readonly (string Href, string Label)[] Links =
+    [
+        ("/", "Documents"), ("/add", "Add"), ("/read", "Read"), ("/search", "Search"),
+        ("/news", "What's new"), ("/history", "History"), ("/activity", "Activity"), ("/settings", "Settings"),
+    ];
+
+    private string theme = "system";
+    private DateTime? next;
+    private string scheduleText = "";
+
+    private bool IsActive(string href)
+    {
+        var path = "/" + Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+        return href == "/" ? path == "/" : path.StartsWith(href, StringComparison.Ordinal);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        Runner.Changed += OnChanged;
+        Settings.Changed += OnChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var s = await Settings.ScheduleAsync();
+        next = s.Next(DateTime.Now, await Settings.LastScheduledRunAsync());
+        scheduleText = s.Describe();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        theme = await JS.InvokeAsync<string>("lecternTheme.get");
+        StateHasChanged();
+    }
+
+    private async Task CycleTheme()
+    {
+        theme = theme switch { "system" => "light", "light" => "dark", _ => "system" };
+        await JS.InvokeVoidAsync("lecternTheme.set", theme);
+    }
+
+    private void SyncAll() => Runner.TryStart(null, "manual", "Syncing all docs");
+
+    private void OnChanged() => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    private void OnLocationChanged(object? s, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Runner.Changed -= OnChanged;
+        Settings.Changed -= OnChanged;
+    }
+}

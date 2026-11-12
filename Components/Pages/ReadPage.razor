@@ -1,0 +1,105 @@
+@page "/read"
+@page "/read/{DocGuid}/{PageGuid}"
+@inject DocReader Reader
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(current?.Title ?? "Read") · Lectern</PageTitle>
+<HeadContent><style>@((MarkupString)DocCss.Content)</style></HeadContent>
+<TopNav />
+
+<div class="reader @(menuOpen ? "menu-open" : "")">
+    <aside class="reader-nav">
+        <input class="search" type="search" placeholder="Filter pages…" @bind="filter" @bind:event="oninput" />
+        @foreach (var course in docs.GroupBy(d => d.Info.Course))
+        {
+            <div class="group">@course.Key</div>
+            @foreach (var d in course)
+            {
+                var pages = Filtered(d).ToList();
+                if (pages.Count == 0) continue;
+                <details class="doc-outline" open="@(d.Guid == DocGuid || filter.Length > 0)">
+                    <summary>@d.Title</summary>
+                    @foreach (var p in pages)
+                    {
+                        <a href="@($"read/{d.Guid}/{p.Guid}")" class="@(p.Guid == PageGuid ? "on" : "")" style="padding-left:@(22 + p.Depth * 14)px" @onclick="() => menuOpen = false">@p.Title</a>
+                    }
+                </details>
+            }
+        }
+    </aside>
+
+    <main class="reader-main">
+        <button class="btn small menu-btn" @onclick="() => menuOpen = !menuOpen">☰ Pages</button>
+        @if (doc is null || current is null)
+        {
+            <div class="content">
+                <h1>Read</h1>
+                <p class="muted">@docs.Count documents · @docs.Sum(d => d.Pages.Count) pages</p>
+                <div class="tiles">
+                    @foreach (var d in docs)
+                    {
+                        <a class="tile" href="@(d.Pages.Count > 0 ? $"read/{d.Guid}/{d.Pages[0].Guid}" : "read")">
+                            <strong>@d.Title</strong>
+                            <span class="muted tiny">@d.Info.Folder<br />@d.Pages.Count pages · synced @Format.Ago(d.Info.LastSync)</span>
+                        </a>
+                    }
+                </div>
+                @if (docs.Count == 0) { <p class="muted">Nothing synced yet. <a class="accent" href="add">Add a document</a>.</p> }
+            </div>
+        }
+        else
+        {
+            <div class="content">
+                <div class="crumbs">
+                    <span>@doc.Info.Course</span><span>@doc.Title</span>
+                    <a href="@Reader.FileUrl(Path.Combine(doc.Info.FolderPath!, current.Path))" target="_blank">Open .md</a>
+                    @if (doc.Info.PdfFile is { } pdf) { <a href="@Reader.FileUrl(pdf)" target="_blank">PDF</a> }
+                    <a href="@($"https://{doc.Info.Doc.Host}/share/d/{current.Guid}")" target="_blank" rel="noopener">Online ↗</a>
+                </div>
+                @((MarkupString)html)
+                <div class="pager">
+                    @if (Prev is { } p) { <a href="@($"read/{doc.Guid}/{p.Guid}")"><small>← Previous</small>@p.Title</a> } else { <span></span> }
+                    @if (Next is { } n) { <a class="right" href="@($"read/{doc.Guid}/{n.Guid}")"><small>Next →</small>@n.Title</a> }
+                </div>
+            </div>
+        }
+    </main>
+</div>
+
+@code {
+    [Parameter] public string? DocGuid { get; set; }
+    [Parameter] public string? PageGuid { get; set; }
+
+    private List<ReaderDoc> docs = [];
+    private ReaderDoc? doc;
+    private ReaderPage? current;
+    private string html = "";
+    private string filter = "";
+    private bool menuOpen;
+
+    private int Index => doc is null || current is null ? -1 : doc.Pages.IndexOf(current);
+    private ReaderPage? Prev => Index > 0 ? doc!.Pages[Index - 1] : null;
+    private ReaderPage? Next => Index >= 0 && Index < doc!.Pages.Count - 1 ? doc.Pages[Index + 1] : null;
+
+    private IEnumerable<ReaderPage> Filtered(ReaderDoc d) =>
+        filter.Trim().Length == 0 ? d.Pages : d.Pages.Where(p => p.Title.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        docs = await Reader.DocsAsync();
+        doc = docs.FirstOrDefault(d => d.Guid == DocGuid);
+        current = doc?.Pages.FirstOrDefault(p => p.Guid == PageGuid);
+        if (doc is not null && current is not null)
+        {
+            var pageToDoc = new Dictionary<string, string>();
+            foreach (var d in docs) foreach (var p in d.Pages) pageToDoc.TryAdd(p.Guid, d.Guid);
+            html = Reader.RenderHtml(doc, current.Guid, pageToDoc);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (current is not null) await JS.InvokeVoidAsync("lectern.pageShown");
+    }
+}
